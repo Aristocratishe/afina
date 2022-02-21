@@ -9,12 +9,12 @@ bool SimpleLRU::Put(const std::string &key, const std::string &value) {
         return false;
     }
     auto it = _lru_index.find(key);
-    if (it == _lru_index.end()) {
+    if (_lru_index.find(key) == _lru_index.end()) {
         std::unique_ptr<lru_node> newNode(new lru_node{key, value, nullptr, nullptr});
         if (!_lru_head) {
             _lru_head = std::move(newNode);
             _lru_tail = _lru_head.get();
-            _lru_index.emplace(key, *_lru_head);
+            _lru_index.emplace(std::ref(key), *_lru_head);
             currSize += key.size() + value.size();
             return true;
         }
@@ -42,6 +42,10 @@ bool SimpleLRU::PutIfAbsent(const std::string &key, const std::string &value) {
             _lru_index.emplace(key, *_lru_head);
             currSize += key.size() + value.size();
             return true;
+        }
+        currSize += key.size() + value.size();
+        while (currSize > _max_size) {
+            Delete(_lru_tail->key);
         }
         newNode->next = std::move(_lru_head);
         newNode->next->prev = newNode.get();
@@ -78,30 +82,30 @@ bool SimpleLRU::Delete(const std::string &key) {
     }
     auto currNode = it->second;
     if (!currNode.get().prev && !currNode.get().next) {
-        _lru_head.reset();
-        _lru_tail->prev = nullptr;
         _lru_index.erase(key);
+        _lru_head.reset();
+        _lru_tail = nullptr;
         currSize = 0;
         return true;
     }
     if(currNode.get().prev == nullptr) {
+        currSize -= key.size() + currNode.get().value.size();
+        _lru_index.erase(key);
         currNode.get().next->prev = nullptr;
         _lru_head = std::move(currNode.get().next);
-        _lru_index.erase(key);
-        currSize -= key.size() + currNode.get().value.size();
         return true;
     }
     if (currNode.get().next == nullptr) {
+        currSize -= key.size() + currNode.get().value.size();
+        _lru_index.erase(key);
         currNode.get().prev->next = nullptr;
         _lru_tail = currNode.get().prev;
-        _lru_index.erase(key);
-        currSize -= key.size() + currNode.get().value.size();
         return true;
     }
+    currSize -= key.size() + currNode.get().value.size();
+    _lru_index.erase(key);
     currNode.get().prev->next = std::move(currNode.get().next);
     currNode.get().prev->next->prev = currNode.get().prev;
-    _lru_index.erase(key);
-    currSize -= key.size() + currNode.get().value.size();
     return true;
 }
 
