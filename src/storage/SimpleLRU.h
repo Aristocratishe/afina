@@ -7,6 +7,7 @@
 #include <string>
 
 #include <afina/Storage.h>
+#include <unordered_map>
 
 namespace Afina {
 namespace Backend {
@@ -21,7 +22,13 @@ public:
 
     ~SimpleLRU() {
         _lru_index.clear();
-        _lru_head.reset(); // TODO: Here is stack overflow
+        std::unique_ptr<lru_node> _head(std::move(_lru_head));
+        std::unique_ptr<lru_node> next;
+        while(_head){
+            next = std::move(_head->next);
+            _head.reset();
+            _head = std::move(next);
+        }
     }
 
     // Implements Afina::Storage interface
@@ -61,7 +68,13 @@ private:
     lru_node* _lru_tail;
 
     // Index of nodes from list above, allows fast random access to elements by lru_node#key
-    std::map<const std::string, std::reference_wrapper<lru_node>, std::less<std::string>> _lru_index;
+    std::map<std::reference_wrapper<const std::string>, std::reference_wrapper<lru_node>, std::less<std::string>> _lru_index;
+
+private:
+
+    bool addNewNode(const std::string &key, const std::string &value);
+
+    void deleteNode(std::reference_wrapper<lru_node>);
 };
 
 } // namespace Backend
