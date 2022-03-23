@@ -68,10 +68,6 @@ bool SimpleLRU::updateNode(std::reference_wrapper<lru_node> node, const std::str
     if (node.get().key.size() + value.size() > _max_size)
         return false;
     currSize += value.size() - node.get().value.size();
-    if (currSize > _max_size && _lru_index.size() == 1) {
-        currSize += node.get().value.size() - value.size();
-        return false;
-    }
     moveToHead(node);
     while (currSize > _max_size && _lru_index.size() > 1) {
         deleteNode(*_lru_tail);
