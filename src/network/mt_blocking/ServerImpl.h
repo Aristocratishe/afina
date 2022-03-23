@@ -61,7 +61,7 @@ private:
     std::mutex _mutex;
     const size_t _max_connections;
     std::condition_variable _cv;
-    std::set<int> _all_clients;
+    std::set<int> _all_sockets;
 };
 
 } // namespace MTblocking

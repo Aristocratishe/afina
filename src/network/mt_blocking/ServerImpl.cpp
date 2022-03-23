@@ -74,6 +74,7 @@ void ServerImpl::Start(uint16_t port, uint32_t n_accept, uint32_t n_workers) {
     }
 
     running.store(true);
+    _all_sockets.emplace(_server_socket);
     _thread = std::thread(&ServerImpl::OnRun, this);
     _thread.detach();
 }
@@ -82,16 +83,15 @@ void ServerImpl::Start(uint16_t port, uint32_t n_accept, uint32_t n_workers) {
 void ServerImpl::Stop() {
     running.store(false);
     std::unique_lock<std::mutex> lock(_mutex);
-    shutdown(_server_socket, SHUT_RDWR);
-    for (auto client : _all_clients) {
-        shutdown(client, SHUT_RD);
+    for (auto& socket : _all_sockets) {
+        shutdown(socket, SHUT_RD);
     }
 }
 
 // See Server.h
 void ServerImpl::Join() {
     std::unique_lock<std::mutex> lock(_mutex);
-    if (running.load() || !_all_clients.empty()) {
+    while (running.load() || !_all_sockets.empty()) {
         _cv.wait(lock);
     }
 }
@@ -134,12 +134,12 @@ void ServerImpl::OnRun() {
         // TODO: Start new thread and process data from/to connection
         {
             std::unique_lock<std::mutex> lock(_mutex);
-            if (_all_clients.size() == _max_connections) {
+            if (_all_sockets.size() == _max_connections + 1) {
                 _logger->warn("Too enough clients! Please, try to connect later.");
                 close(client_socket);
             }
             else {
-                _all_clients.emplace(client_socket);
+                _all_sockets.emplace(client_socket);
                 std::thread worker = std::thread(&ServerImpl::newWorkerThread, this, client_socket);
                 worker.detach();
             }
@@ -150,11 +150,13 @@ void ServerImpl::OnRun() {
     _logger->warn("Network stopped");
     {
         std::unique_lock<std::mutex> lock(_mutex);
+        auto it = _all_sockets.find(_server_socket);
+        assert(it != _all_sockets.end());
+        _all_sockets.erase(it);
         close(_server_socket);
-        if (!running.load() && _all_clients.empty()) {
-            _cv.notify_all();
-        }
     }
+    if (!running.load() && _all_sockets.empty())
+        _cv.notify_all();
 }
 
 void ServerImpl::newWorkerThread(int client_socket) {
@@ -249,14 +251,13 @@ void ServerImpl::newWorkerThread(int client_socket) {
     // We are done with this connection
     {
         std::unique_lock<std::mutex> lock(_mutex);
-        auto iter = _all_clients.find(client_socket);
-        assert(iter != _all_clients.end());
-        _all_clients.erase(iter);
+        auto it = _all_sockets.find(client_socket);
+        assert(it != _all_sockets.end());
+        _all_sockets.erase(it);
         close(client_socket);
-        if (!running.load() && _all_clients.empty()) {
-            _cv.notify_all();
-        }
     }
+    if (!running.load() && _all_sockets.empty())
+        _cv.notify_all();
 }
 
 } // namespace MTblocking
