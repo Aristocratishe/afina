@@ -75,6 +75,10 @@ private:
     bool addNewNode(const std::string &key, const std::string &value);
 
     void deleteNode(std::reference_wrapper<lru_node>);
+
+    bool updateNode(std::reference_wrapper<lru_node>, const std::string &value);
+
+    bool moveToHead(std::reference_wrapper<lru_node>);
 };
 
 } // namespace Backend
